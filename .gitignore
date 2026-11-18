@@ -1,0 +1,11 @@
+# HWID backups contain machine identifiers — never commit them
+backups/*.json
+!backups/.gitkeep
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/

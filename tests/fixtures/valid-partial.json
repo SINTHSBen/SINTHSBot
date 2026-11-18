@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-11-18T21:05:00.0000000+01:00",
+  "hostname": "TEST-PC",
+  "restorable": {
+    "machineGuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "hwProfileGuid": null,
+    "sqmMachineId": ""
+  },
+  "infoOnly": {
+    "computerName": "TEST-PC",
+    "biosUuid": null,
+    "baseBoardSerial": null,
+    "diskSerials": [],
+    "macAddresses": [],
+    "windowsBuild": "26100",
+    "osCaption": "Microsoft Windows 11 Pro"
+  }
+}
