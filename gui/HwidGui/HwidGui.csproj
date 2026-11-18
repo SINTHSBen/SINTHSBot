@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AssemblyName>SINTHSBot-HWID</AssemblyName>
+    <RootNamespace>HwidGui</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <DebugType>embedded</DebugType>
+    <Version>1.0.0</Version>
+    <Product>SINTHSBot HWID Backup</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\hwid.ps1" LogicalName="HwidGui.scripts.hwid.ps1" />
+    <EmbeddedResource Include="..\..\lib\Collect.ps1" LogicalName="HwidGui.scripts.lib.Collect.ps1" />
+    <EmbeddedResource Include="..\..\lib\Validate.ps1" LogicalName="HwidGui.scripts.lib.Validate.ps1" />
+    <EmbeddedResource Include="..\..\lib\Restore.ps1" LogicalName="HwidGui.scripts.lib.Restore.ps1" />
+  </ItemGroup>
+</Project>

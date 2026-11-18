@@ -1,10 +1,35 @@
 # SINTHSBot — Windows HWID Backup & Restore
 
-Sicheres Windows-PowerShell-CLI, um die **originale Hardware-Identität vor einem Spoof** zu sichern und danach wiederherzustellen.
+Sicheres Tool, um die **originale Hardware-Identität vor einem Spoof** zu sichern und danach wiederherzustellen.
+
+Enthält:
+- **GUI-EXE**: [`dist/SINTHSBot-HWID.exe`](dist/SINTHSBot-HWID.exe)
+- **CLI**: [`hwid.ps1`](hwid.ps1)
 
 Getestet gegen das Verhalten von **Nebel Spoofer** (AMIDEWIN SMBIOS, NetworkAddress-MAC, MACX EEPROM, NdisMacChanger) — ohne den Spoofer mitzuliefern und ohne Zufalls-Serials zu erzeugen.
 
-## Wichtiger Ablauf
+## GUI (EXE)
+
+1. [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) installieren (Windows x64 Desktop Runtime)
+2. `dist\SINTHSBot-HWID.exe` starten
+3. **Backup** klicken (ohne Admin möglich)
+4. Später Backup wählen → **Verify** / **Safe Restore** (UAC) / **AMIDE-Skript**
+
+Backups liegen unter `%LocalAppData%\SINTHSBot-HWID\backups\`.
+
+EXE neu bauen:
+
+```powershell
+.\gui\build.ps1          # klein (framework-dependent) — Default
+.\gui\build.ps1 -Mode self   # groß, ohne Runtime-Installation
+```
+
+```bash
+bash gui/build.sh        # fd
+bash gui/build.sh self   # self-contained
+```
+
+## CLI-Ablauf
 
 ```text
 1. VOR dem Spoof:   .\hwid.ps1 backup
@@ -45,7 +70,7 @@ Guards: Admin-Check, Schema/GUID-Validierung, Pre-Restore-Snapshot, Diff+YES, Ro
 
 ## Was `generate-amide-restore` macht
 
-Erzeugt unter `backups\amide-restore\` ein `.bat` + `.txt` mit den **Original-Serials aus deinem Backup**:
+Erzeugt unter `backups\amide-restore\` (CLI) bzw. `%LocalAppData%\SINTHSBot-HWID\backups\amide-restore\` (GUI) ein `.bat` + `.txt` mit den **Original-Serials aus deinem Backup**:
 
 ```text
 AMIDEWINx64.EXE /SU <original-uuid>    # nie "auto" (das wäre neuer UUID = Spoof)
@@ -77,10 +102,10 @@ Du musst `RESTORE-ORIGINAL` tippen. Falsche Werte können Firmware killen — Sk
 
 | Datei | Rolle |
 |-------|--------|
-| `hwid.ps1` | CLI |
-| `lib/Collect.ps1` | Einsammeln |
-| `lib/Validate.ps1` | Schema/Diff/Verify |
-| `lib/Restore.ps1` | Safe restore + AMIDE-Skript |
+| `dist/SINTHSBot-HWID.exe` | GUI |
+| `gui/HwidGui/` | WinForms-Quellcode |
+| `hwid.ps1` | CLI (+ von der GUI aufgerufen) |
+| `lib/*.ps1` | Collect / Validate / Restore |
 | `tests/Validate.Tests.ps1` | Fixture-Tests |
 
 ## Hinweis

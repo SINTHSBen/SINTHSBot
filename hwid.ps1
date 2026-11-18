@@ -41,7 +41,12 @@ if ([string]::IsNullOrWhiteSpace($scriptRoot)) {
 . (Join-Path $scriptRoot 'lib\Validate.ps1')
 . (Join-Path $scriptRoot 'lib\Restore.ps1')
 
-$BackupDirectory = Join-Path $scriptRoot 'backups'
+$BackupDirectory = if (-not [string]::IsNullOrWhiteSpace($env:SINTHSBOT_BACKUPS)) {
+    $env:SINTHSBOT_BACKUPS
+}
+else {
+    Join-Path $scriptRoot 'backups'
+}
 
 function Show-Usage {
     @"
