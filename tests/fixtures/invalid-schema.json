@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 99,
+  "createdAt": "2026-11-18T21:00:00.0000000+01:00",
+  "hostname": "TEST-PC",
+  "restorable": {
+    "machineGuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  },
+  "smbios": {
+    "systemUuid": "11111111-2222-3333-4444-555555555555",
+    "baseBoardSerial": "MB-OK"
+  }
+}

@@ -1,0 +1,22 @@
+# HWID backups contain machine identifiers — never commit them
+backups/*.json
+backups/amide-restore/
+!backups/.gitkeep
+
+# Build artifacts (keep published GUI EXE in dist/)
+gui/HwidGui/bin/
+gui/HwidGui/obj/
+dist/fd/
+dist/trimmed/
+dist/*.pdb
+dist/*.dll
+dist/*.json
+dist/*.xml
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
