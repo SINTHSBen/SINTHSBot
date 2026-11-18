@@ -1,111 +1,88 @@
 # SINTHSBot — Windows HWID Backup & Restore
 
-Sicheres Windows-PowerShell-CLI zum Backup und kontrollierten Restore von Hardware-IDs.
-**Safe-by-default:** Restore schreibt nur bekannte Registry-Werte aus einem eigenen Backup — keine Firmware-, Disk- oder Treiber-Hacks.
+Sicheres Windows-PowerShell-CLI, um die **originale Hardware-Identität vor einem Spoof** zu sichern und danach wiederherzustellen.
+
+Getestet gegen das Verhalten von **Nebel Spoofer** (AMIDEWIN SMBIOS, NetworkAddress-MAC, MACX EEPROM, NdisMacChanger) — ohne den Spoofer mitzuliefern und ohne Zufalls-Serials zu erzeugen.
+
+## Wichtiger Ablauf
+
+```text
+1. VOR dem Spoof:   .\hwid.ps1 backup
+2. Spoof passiert   (Nebel Permanent Spoof / Kernel MAC / …)
+3. Danach:          .\hwid.ps1 verify <backup.json>
+4. Safe restore:    .\hwid.ps1 restore <backup.json>
+5. UEFI original:   .\hwid.ps1 generate-amide-restore <backup.json>
+                    → Skript prüfen → AMIDEWINx64.EXE daneben → als Admin
+6. Neu starten →    .\hwid.ps1 verify <backup.json>
+```
 
 ## Voraussetzungen
 
-- Windows 10/11
-- PowerShell 5.1+ (mitgeliefert) oder PowerShell 7+
-- **Administrator-Rechte** für Restore (und empfohlen für vollständige Backups)
+- Windows 10/11, PowerShell 5.1+ oder 7+
+- **Administrator** für `restore`
+- Für UEFI-Zurückschreiben: eigenes `AMIDEWINx64.EXE` (+ Treiber) — wird **nicht** mitgeliefert
 
-## Schnellstart
-
-In einem **als Administrator** geöffneten PowerShell-Fenster im Repo-Ordner:
+## Befehle
 
 ```powershell
-# Aktuellen Stand sichern
 .\hwid.ps1 backup
-
-# Vorhandene Backups anzeigen
 .\hwid.ps1 list
-
-# Backup oder aktuellen Stand anzeigen
-.\hwid.ps1 show
-.\hwid.ps1 show .\backups\hwid-2026-11-18T210000Z.json
-
-# Restore mit Diff + Bestätigung (legt vorher automatisch einen Snapshot an)
-.\hwid.ps1 restore .\backups\hwid-2026-11-18T210000Z.json
-
-# Restore ohne interaktive Pause (Snapshot trotzdem immer)
-.\hwid.ps1 restore .\backups\hwid-2026-11-18T210000Z.json -Force
+.\hwid.ps1 show [file]
+.\hwid.ps1 verify <file>
+.\hwid.ps1 restore <file>          # Diff + YES-Bestätigung + Pre-Snapshot
+.\hwid.ps1 restore <file> -Force   # ohne Pause, Snapshot trotzdem
+.\hwid.ps1 generate-amide-restore <file>
 ```
 
-Empfohlener Ablauf: **Backup → später Restore (Diff lesen) → bestätigen → Neustart**.
+## Was `restore` (safe) zurückschreibt
 
-## Was wird restored?
+| Ziel | Werte |
+|------|--------|
+| Registry | `MachineGuid`, `HwProfileGuid`, `SQMClient\MachineId`, `SusClientId`, `ComputerHardwareId` |
+| Network | `NetworkAddress` unter Netz-Class `{4d36e972-…}` — auf Backup setzen oder entfernen (Hardware-MAC) |
 
-Nur diese Registry-Werte (wenn sie im Backup vorhanden sind):
+Guards: Admin-Check, Schema/GUID-Validierung, Pre-Restore-Snapshot, Diff+YES, Rollback bei Fehler.
 
-| Key | Wert |
-|-----|------|
-| `HKLM\SOFTWARE\Microsoft\Cryptography` | `MachineGuid` |
-| `HKLM\SYSTEM\CurrentControlSet\Control\IDConfigDB\Hardware Profiles\0001` | `HwProfileGuid` |
-| `HKLM\SOFTWARE\Microsoft\SQMClient` | `MachineId` (falls vorhanden) |
+## Was `generate-amide-restore` macht
 
-## Was wird nur dokumentiert (kein Restore)?
+Erzeugt unter `backups\amide-restore\` ein `.bat` + `.txt` mit den **Original-Serials aus deinem Backup**:
 
-Im Backup unter `infoOnly` (nur lesen):
-
-- ComputerName / Hostname
-- BIOS UUID, BaseBoard-Serial
-- Disk-Serials
-- MAC-Adressen
-- Windows-Build
-
-## Was wird bewusst nie angefasst?
-
-- SMBIOS/BIOS UUID schreiben
-- Festplatten-/NVMe-Firmware-Serials
-- MAC-Adressen über Treiber-Hacks
-- Unsigned Kernel-Driver / Bootloader-Patches
-- Volume-Serials (Formatieren wäre destruktiv)
-- HWID-Spoofing auf neue Zufallswerte
-- Erzwungener Reboot
-
-## Sicherheits-Guards beim Restore
-
-1. Admin-Check — ohne Elevation Abbruch
-2. Schema- und GUID-Validierung der Backup-JSON
-3. Automatischer Pre-Restore-Snapshot unter `backups\pre-restore-*.json` (auch mit `-Force`)
-4. Diff der restorable Werte + Bestätigung (außer `-Force`)
-5. Bei Schreibfehler: sofortiger Rollback aus dem Snapshot
-6. Fehlende Keys im Backup → Skip + Warnung, kein Raten
-7. Nach Erfolg: Neustart-Hinweis (kein Auto-Reboot)
-
-## Backup-Format
-
-```json
-{
-  "schemaVersion": 1,
-  "createdAt": "2026-11-18T21:00:00+01:00",
-  "hostname": "PC-NAME",
-  "restorable": {
-    "machineGuid": "...",
-    "hwProfileGuid": "{...}",
-    "sqmMachineId": "..."
-  },
-  "infoOnly": {
-    "biosUuid": "...",
-    "baseBoardSerial": "...",
-    "diskSerials": [],
-    "macAddresses": []
-  }
-}
+```text
+AMIDEWINx64.EXE /SU <original-uuid>    # nie "auto" (das wäre neuer UUID = Spoof)
+AMIDEWINx64.EXE /BS <original-baseboard>
+AMIDEWINx64.EXE /CS <original-chassis>
+AMIDEWINx64.EXE /SS <original-system>
+AMIDEWINx64.EXE /BT <original-tag>
 ```
 
-Backups liegen in `backups\` und sind per `.gitignore` vom Commit ausgeschlossen.
+Du musst `RESTORE-ORIGINAL` tippen. Falsche Werte können Firmware killen — Skript vorher lesen.
+
+## Was bewusst nicht auto-gemacht wird
+
+| Nebel-Aktion | Warum nicht auto |
+|--------------|------------------|
+| Permanent Spoof (AMIDEWIN UEFI) | Firmware-Schreiben → nur generiertes Original-Skript |
+| MACX EEPROM/EFUSE MAC | NIC-Flash → manuell mit Original-MAC aus `infoOnly.macAddresses` |
+| NdisMacChanger Kernel-MAC | Startup-Treiber → deinstallieren/Nebel-Revert; Registry-MAC clear macht safe restore |
+| TPM via BIOS-Flash | BIOS-Version zurückflashen (nicht dieses Tool) |
+| Zufällige neue Serials | Das wäre Spoofen — hier verboten |
+
+## Backup-Inhalt (schema v2)
+
+- `restorable.*` — Registry + NetworkAddress
+- `smbios.*` — Original UUID / BaseBoard / Chassis / System (für AMIDEWIN-Restore)
+- `infoOnly.*` — Disk-Serials, MAC-Fingerprints, Build (Verify)
 
 ## Dateien
 
 | Datei | Rolle |
 |-------|--------|
-| `hwid.ps1` | CLI-Einstieg |
-| `lib/Collect.ps1` | HWID einsammeln |
-| `lib/Validate.ps1` | Schema/GUID/Diff |
-| `lib/Restore.ps1` | Sicheres Schreiben + Rollback |
-| `tests/Validate.Tests.ps1` | Fixture-Tests (ohne Windows-Registry) |
+| `hwid.ps1` | CLI |
+| `lib/Collect.ps1` | Einsammeln |
+| `lib/Validate.ps1` | Schema/Diff/Verify |
+| `lib/Restore.ps1` | Safe restore + AMIDE-Skript |
+| `tests/Validate.Tests.ps1` | Fixture-Tests |
 
 ## Hinweis
 
-Dieses Tool ändert nur die oben genannten Registry-Werte. Es ist kein Anti-Cheat-Bypass und kein generischer HWID-Spoofer. Bei Unsicherheit: nur `backup` nutzen und Restore weglassen.
+Kein Anti-Cheat-Bypass und kein Spoofer. Ziel: **Original sichern und nach einem Spoof wiederherstellen**, ohne den PC mutwillig zu ruinieren.

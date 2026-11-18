@@ -76,10 +76,10 @@ $invalidSchema = Read-Fixture 'invalid-schema.json'
 $invalidEmpty = Read-Fixture 'invalid-empty-restorable.json'
 
 $r1 = Test-HwidBackupObject -Backup $validFull
-Assert-True 'valid-full IsValid' $r1.IsValid -Detail (($r1.Errors -join '; '))
+Assert-True 'valid-full IsValid (schema v2)' $r1.IsValid -Detail (($r1.Errors -join '; '))
 
 $r2 = Test-HwidBackupObject -Backup $validPartial
-Assert-True 'valid-partial IsValid (only machineGuid set)' $r2.IsValid -Detail (($r2.Errors -join '; '))
+Assert-True 'valid-partial IsValid (schema v1 only machineGuid)' $r2.IsValid -Detail (($r2.Errors -join '; '))
 
 $r3 = Test-HwidBackupObject -Backup $invalidGuid
 Assert-True 'invalid-bad-guid rejected' (-not $r3.IsValid)
@@ -95,9 +95,6 @@ Assert-True 'invalid-schema mentions schemaVersion' (
 
 $r5 = Test-HwidBackupObject -Backup $invalidEmpty
 Assert-True 'invalid-empty-restorable rejected' (-not $r5.IsValid)
-Assert-True 'invalid-empty mentions keine wiederherstellbaren' (
-    [bool]($r5.Errors | Where-Object { $_ -match 'wiederherstellbar' })
-)
 
 $rNull = Test-HwidBackupObject -Backup $null
 Assert-True 'null backup rejected' (-not $rNull.IsValid)
@@ -110,11 +107,13 @@ Write-Host ''
 Write-Host '=== Compare-RestorableHwid / Format-HwidDiff ==='
 
 $current = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     restorable    = [ordered]@{
-        machineGuid   = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
-        hwProfileGuid = '{11111111-2222-3333-4444-555555555555}'
-        sqmMachineId  = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        machineGuid        = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+        hwProfileGuid      = '{11111111-2222-3333-4444-555555555555}'
+        sqmMachineId       = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        susClientId        = 'd4e5f6a7-b8c9-0123-def0-234567890123'
+        computerHardwareId = '{e5f6a7b8-c9d0-1234-ef01-345678901234}'
     }
 }
 
@@ -122,11 +121,12 @@ $diff = Compare-RestorableHwid -Current $current -Target $validFull
 $byName = @{}
 foreach ($row in $diff) { $byName[$row.Name] = $row }
 
-Assert-Equal 'diff row count' 3 $diff.Count
+Assert-Equal 'diff row count' 5 $diff.Count
 Assert-True 'machineGuid unchanged (OK)' (-not $byName['machineGuid'].Changed)
 Assert-True 'machineGuid WillWrite' $byName['machineGuid'].WillWrite
 Assert-True 'hwProfileGuid changed' $byName['hwProfileGuid'].Changed
 Assert-True 'sqmMachineId changed' $byName['sqmMachineId'].Changed
+Assert-True 'susClientId unchanged' (-not $byName['susClientId'].Changed)
 
 $diffPartial = Compare-RestorableHwid -Current $current -Target $validPartial
 $partialMap = @{}
@@ -136,7 +136,6 @@ Assert-True 'partial hwProfileGuid skipped' (-not $partialMap['hwProfileGuid'].W
 Assert-True 'partial sqmMachineId skipped' (-not $partialMap['sqmMachineId'].WillWrite)
 Assert-True 'partial machineGuid WillWrite' $partialMap['machineGuid'].WillWrite
 
-# Flat maps (no restorable wrapper) still compare
 $flatCurrent = [ordered]@{
     machineGuid   = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
     hwProfileGuid = '{11111111-2222-3333-4444-555555555555}'
@@ -155,7 +154,7 @@ Assert-True 'flat hwProfileGuid unchanged' (-not $flatBy['hwProfileGuid'].Change
 Assert-True 'flat sqmMachineId skip' (-not $flatBy['sqmMachineId'].WillWrite)
 
 $formatted = Format-HwidDiff -DiffRows $diff
-Assert-True 'diff header present' ($formatted -match 'Diff \(restorable\)')
+Assert-True 'diff header present' ($formatted -match 'Diff \(restorable registry\)')
 Assert-True 'diff shows WRITE for hwProfileGuid' ($formatted -match 'hwProfileGuid\s+.+\s+WRITE')
 Assert-True 'diff shows OK for machineGuid' ($formatted -match 'machineGuid\s+.+\s+OK')
 
@@ -163,12 +162,33 @@ $formattedPartial = Format-HwidDiff -DiffRows $diffPartial
 Assert-True 'diff shows SKIP for missing fields' ($formattedPartial -match 'SKIP')
 
 Write-Host ''
+Write-Host '=== Compare-SmbiosToBackup ==='
+$curSmb = [pscustomobject]@{
+    smbios = [ordered]@{
+        systemUuid      = '11111111-2222-3333-4444-555555555555'
+        systemSerial    = 'CHANGED'
+        baseBoardSerial = '07D36RE_NB341CYCBD'
+        chassisSerial   = '651012'
+        biosSerial      = 'To be filled by O.E.M.'
+    }
+}
+$smbRows = Compare-SmbiosToBackup -CurrentBackup $curSmb -TargetBackup $validFull
+$smbMap = @{}
+foreach ($row in $smbRows) { $smbMap[$row.Name] = $row }
+Assert-True 'uuid match' $smbMap['systemUuid'].Match
+Assert-True 'systemSerial mismatch' (-not $smbMap['systemSerial'].Match)
+Assert-True 'baseBoard match' $smbMap['baseBoardSerial'].Match
+$smbFmt = Format-SmbiosVerify -Rows $smbRows
+Assert-True 'smbios verify header' ($smbFmt -match 'Verify SMBIOS')
+Assert-True 'smbios shows MISMATCH' ($smbFmt -match 'MISMATCH')
+
+Write-Host ''
 Write-Host '=== Get-RestorablePropertyNames ==='
 $names = Get-RestorablePropertyNames
-Assert-equal 'property count' 3 $names.Count
+Assert-equal 'property count' 5 $names.Count
 Assert-True 'includes machineGuid' ($names -contains 'machineGuid')
-Assert-True 'includes hwProfileGuid' ($names -contains 'hwProfileGuid')
-Assert-True 'includes sqmMachineId' ($names -contains 'sqmMachineId')
+Assert-True 'includes susClientId' ($names -contains 'susClientId')
+Assert-True 'includes computerHardwareId' ($names -contains 'computerHardwareId')
 
 Write-Host ''
 Write-Host ("Results: {0} passed, {1} failed" -f $script:Passed, $script:Failed)

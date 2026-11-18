@@ -1,28 +1,26 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Windows HWID Backup & Restore (safe-by-default).
+    Windows HWID Backup & Restore — original identity before/after Nebel-style spoof.
 
 .DESCRIPTION
-    Backup and restore MachineGuid / HwProfileGuid / SQM MachineId only.
-    Never touches firmware, disk serials, MACs, or drivers.
+    backup / verify / safe restore (registry + NetworkAddress) /
+    generate-amide-restore (writes ORIGINAL SMBIOS script for AMIDEWIN — never randomizes).
 
 .EXAMPLE
     .\hwid.ps1 backup
 .EXAMPLE
-    .\hwid.ps1 list
-.EXAMPLE
-    .\hwid.ps1 show
+    .\hwid.ps1 verify .\backups\hwid-....json
 .EXAMPLE
     .\hwid.ps1 restore .\backups\hwid-....json
 .EXAMPLE
-    .\hwid.ps1 restore .\backups\hwid-....json -Force
+    .\hwid.ps1 generate-amide-restore .\backups\hwid-....json
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('backup', 'list', 'show', 'restore', 'help')]
+    [ValidateSet('backup', 'list', 'show', 'restore', 'verify', 'generate-amide-restore', 'help')]
     [string]$Command = 'help',
 
     [Parameter(Position = 1)]
@@ -47,35 +45,74 @@ $BackupDirectory = Join-Path $scriptRoot 'backups'
 
 function Show-Usage {
     @"
-SINTHSBot HWID Backup & Restore
+SINTHSBot HWID Backup & Restore (Nebel-aware)
+
+Workflow:
+  1) VOR dem Spoof:  .\hwid.ps1 backup
+  2) Nach dem Spoof: .\hwid.ps1 verify <backup>
+  3) Safe restore:   .\hwid.ps1 restore <backup>
+  4) UEFI original:  .\hwid.ps1 generate-amide-restore <backup>
+     (prüft Skript, legt AMIDEWINx64.EXE daneben, tippt RESTORE-ORIGINAL)
 
 Usage:
   .\hwid.ps1 backup
   .\hwid.ps1 list
   .\hwid.ps1 show [file]
+  .\hwid.ps1 verify <file>
   .\hwid.ps1 restore <file> [-Force]
+  .\hwid.ps1 generate-amide-restore <file>
 
-Notes:
-  - Restore needs Administrator rights.
-  - Restore writes ONLY MachineGuid, HwProfileGuid, SQM MachineId.
-  - A pre-restore snapshot is always created under backups\pre-restore-*.json
+Safe restore writes:
+  MachineGuid, HwProfileGuid, SQM MachineId, SusClientId, ComputerHardwareId,
+  NetworkAddress overrides (clear/set to match backup)
+
+Never auto-writes:
+  UEFI/SMBIOS firmware, EEPROM MAC (MACX), TPM/BIOS flash, random spoof values
 "@ | Write-Host
+}
+
+function Resolve-BackupPath {
+    param([Parameter(Mandatory)][string]$FilePath)
+
+    if ([System.IO.Path]::IsPathRooted($FilePath) -and (Test-Path -LiteralPath $FilePath)) {
+        return (Resolve-Path -LiteralPath $FilePath).Path
+    }
+
+    $inBackups = Join-Path $BackupDirectory $FilePath
+    if (Test-Path -LiteralPath $inBackups) {
+        return (Resolve-Path -LiteralPath $inBackups).Path
+    }
+
+    if (Test-Path -LiteralPath $FilePath) {
+        return (Resolve-Path -LiteralPath $FilePath).Path
+    }
+
+    throw "Backup-Datei nicht gefunden: $FilePath"
 }
 
 function Invoke-HwidBackupCommand {
     $result = Save-HwidBackup -BackupDirectory $BackupDirectory -Prefix 'hwid'
     $validation = Test-HwidBackupObject -Backup $result.Payload
     if (-not $validation.IsValid) {
-        Write-Warning ("Backup geschrieben, aber Validierung meldet: {0}" -f ($validation.Errors -join '; '))
+        Write-Warning ("Backup geschrieben, aber Validierung: {0}" -f ($validation.Errors -join '; '))
     }
 
-    Write-Host "Backup gespeichert: $($result.Path)"
+    Write-Host "Original-Backup gespeichert: $($result.Path)"
     Write-Host ''
-    Write-Host 'Restorable:'
     $r = $result.Payload.restorable
-    Write-Host ("  machineGuid:   {0}" -f $(if ($r.machineGuid) { $r.machineGuid } else { '<nicht lesbar>' }))
-    Write-Host ("  hwProfileGuid: {0}" -f $(if ($r.hwProfileGuid) { $r.hwProfileGuid } else { '<nicht lesbar>' }))
-    Write-Host ("  sqmMachineId:  {0}" -f $(if ($r.sqmMachineId) { $r.sqmMachineId } else { '<nicht vorhanden>' }))
+    Write-Host 'Registry (safe restorable):'
+    Write-Host ("  machineGuid:   {0}" -f $(if ($r.machineGuid) { $r.machineGuid } else { '<n/a>' }))
+    Write-Host ("  hwProfileGuid: {0}" -f $(if ($r.hwProfileGuid) { $r.hwProfileGuid } else { '<n/a>' }))
+    Write-Host ("  sqmMachineId:  {0}" -f $(if ($r.sqmMachineId) { $r.sqmMachineId } else { '<n/a>' }))
+    Write-Host ("  susClientId:   {0}" -f $(if ($r.susClientId) { $r.susClientId } else { '<n/a>' }))
+    $s = $result.Payload.smbios
+    Write-Host 'SMBIOS (für generate-amide-restore):'
+    Write-Host ("  UUID:          {0}" -f $(if ($s.systemUuid) { $s.systemUuid } else { '<n/a>' }))
+    Write-Host ("  BaseBoard:     {0}" -f $(if ($s.baseBoardSerial) { $s.baseBoardSerial } else { '<n/a>' }))
+    Write-Host ("  Chassis:       {0}" -f $(if ($s.chassisSerial) { $s.chassisSerial } else { '<n/a>' }))
+    Write-Host ("  SystemSerial:  {0}" -f $(if ($s.systemSerial) { $s.systemSerial } else { '<n/a>' }))
+    Write-Host ''
+    Write-Host 'Wichtig: Dieses Backup VOR Nebel Permanent Spoof / MACX erstellen.'
 }
 
 function Invoke-HwidListCommand {
@@ -99,86 +136,52 @@ function Invoke-HwidListCommand {
     }
 }
 
-function Format-HwidObject {
-    param($Backup)
-
-    $json = $Backup | ConvertTo-Json -Depth 6
-    Write-Host $json
-}
-
 function Invoke-HwidShowCommand {
     param([string]$FilePath)
 
     if ([string]::IsNullOrWhiteSpace($FilePath)) {
         $current = New-HwidBackupObject
         Write-Host 'Aktueller Stand (noch nicht als Datei gespeichert):'
-        Format-HwidObject -Backup $current
+        Write-Host ($current | ConvertTo-Json -Depth 10)
         return
     }
 
-    $resolved = $FilePath
-    if (-not [System.IO.Path]::IsPathRooted($resolved)) {
-        $candidate = Join-Path $BackupDirectory $FilePath
-        if (Test-Path -LiteralPath $candidate) {
-            $resolved = $candidate
-        }
-        elseif (Test-Path -LiteralPath $FilePath) {
-            $resolved = (Resolve-Path -LiteralPath $FilePath).Path
-        }
-    }
-
+    $resolved = Resolve-BackupPath -FilePath $FilePath
     $backup = Read-HwidBackupFile -Path $resolved
     $validation = Test-HwidBackupObject -Backup $backup
     if (-not $validation.IsValid) {
         Write-Warning ("Validierung: {0}" -f ($validation.Errors -join '; '))
     }
     Write-Host "Datei: $resolved"
-    Format-HwidObject -Backup $backup
-}
-
-function Resolve-BackupPath {
-    param([Parameter(Mandatory)][string]$FilePath)
-
-    if ([System.IO.Path]::IsPathRooted($FilePath) -and (Test-Path -LiteralPath $FilePath)) {
-        return (Resolve-Path -LiteralPath $FilePath).Path
-    }
-
-    $inBackups = Join-Path $BackupDirectory $FilePath
-    if (Test-Path -LiteralPath $inBackups) {
-        return (Resolve-Path -LiteralPath $inBackups).Path
-    }
-
-    if (Test-Path -LiteralPath $FilePath) {
-        return (Resolve-Path -LiteralPath $FilePath).Path
-    }
-
-    throw "Backup-Datei nicht gefunden: $FilePath"
+    Write-Host ($backup | ConvertTo-Json -Depth 10)
 }
 
 try {
     switch ($Command) {
-        'help' {
-            Show-Usage
-        }
-        'backup' {
-            Invoke-HwidBackupCommand
-        }
-        'list' {
-            Invoke-HwidListCommand
-        }
-        'show' {
-            Invoke-HwidShowCommand -FilePath $Path
+        'help' { Show-Usage }
+        'backup' { Invoke-HwidBackupCommand }
+        'list' { Invoke-HwidListCommand }
+        'show' { Invoke-HwidShowCommand -FilePath $Path }
+        'verify' {
+            if ([string]::IsNullOrWhiteSpace($Path)) {
+                throw 'verify benötigt eine Backup-Datei.'
+            }
+            $null = Invoke-HwidVerify -BackupPath (Resolve-BackupPath -FilePath $Path)
         }
         'restore' {
             if ([string]::IsNullOrWhiteSpace($Path)) {
-                throw 'restore benötigt eine Backup-Datei. Beispiel: .\hwid.ps1 restore .\backups\hwid-....json'
+                throw 'restore benötigt eine Backup-Datei.'
             }
-            $resolved = Resolve-BackupPath -FilePath $Path
-            $null = Invoke-HwidRestore -BackupPath $resolved -BackupDirectory $BackupDirectory -Force:$Force
+            $null = Invoke-HwidRestore -BackupPath (Resolve-BackupPath -FilePath $Path) -BackupDirectory $BackupDirectory -Force:$Force
         }
-        default {
-            Show-Usage
+        'generate-amide-restore' {
+            if ([string]::IsNullOrWhiteSpace($Path)) {
+                throw 'generate-amide-restore benötigt eine Backup-Datei.'
+            }
+            $outDir = Join-Path $BackupDirectory 'amide-restore'
+            $null = New-AmideOriginalRestoreScript -BackupPath (Resolve-BackupPath -FilePath $Path) -OutputDirectory $outDir
         }
+        default { Show-Usage }
     }
 }
 catch {

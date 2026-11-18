@@ -1,5 +1,6 @@
 # HWID backups contain machine identifiers — never commit them
 backups/*.json
+backups/amide-restore/
 !backups/.gitkeep
 
 # Editor / OS noise

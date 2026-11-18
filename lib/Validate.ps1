@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Schema/GUID validation and restorable-field diff for HWID backups.
+    Schema/GUID validation, diffs, and verify helpers for HWID backups.
 #>
 
 Set-StrictMode -Version Latest
@@ -37,7 +37,12 @@ function Test-IsGuidString {
 }
 
 function Get-RestorablePropertyNames {
-    return @('machineGuid', 'hwProfileGuid', 'sqmMachineId')
+    # Scalar registry fields compared/restored by safe restore
+    return @('machineGuid', 'hwProfileGuid', 'sqmMachineId', 'susClientId', 'computerHardwareId')
+}
+
+function Get-GuidRestorablePropertyNames {
+    return @('machineGuid', 'hwProfileGuid', 'sqmMachineId', 'susClientId')
 }
 
 function ConvertTo-HwidHashtable {
@@ -81,8 +86,11 @@ function Test-HwidBackupObject {
     if (-not $map.Contains('schemaVersion')) {
         $errors.Add('Feld schemaVersion fehlt.')
     }
-    elseif ([int]$map.schemaVersion -ne 1) {
-        $errors.Add("Nicht unterstützte schemaVersion: $($map.schemaVersion) (erwartet: 1).")
+    else {
+        $ver = [int]$map.schemaVersion
+        if ($ver -lt 1 -or $ver -gt 2) {
+            $errors.Add("Nicht unterstützte schemaVersion: $($map.schemaVersion) (erwartet: 1 oder 2).")
+        }
     }
 
     if (-not $map.Contains('restorable') -or $null -eq $map.restorable) {
@@ -106,15 +114,46 @@ function Test-HwidBackupObject {
         }
 
         $hasAny = $true
-        # MachineGuid / SQM MachineId are typically unbraced; HwProfileGuid is often braced.
-        # Accept either form for all restorable fields.
-        if (-not (Test-IsGuidString -Value ([string]$value) -Style Either)) {
-            $errors.Add("restorable.$name ist keine gültige GUID: '$value'")
+        if ((Get-GuidRestorablePropertyNames) -contains $name) {
+            if (-not (Test-IsGuidString -Value ([string]$value) -Style Either)) {
+                $errors.Add("restorable.$name ist keine gültige GUID: '$value'")
+            }
         }
     }
 
-    if (-not $hasAny) {
+    # Schema v2: SMBIOS original block is recommended but optional for v1 backups
+    if ($map.Contains('schemaVersion') -and [int]$map.schemaVersion -ge 2) {
+        if (-not $map.Contains('smbios') -or $null -eq $map.smbios) {
+            $errors.Add('schemaVersion 2 erwartet Feld smbios (Original-Serials für AMIDEWIN-Restore).')
+        }
+        else {
+            $smbios = ConvertTo-HwidHashtable -InputObject $map.smbios
+            $smbiosAny = $false
+            foreach ($k in @('systemUuid', 'baseBoardSerial', 'chassisSerial', 'systemSerial')) {
+                if ($smbios.Contains($k) -and $smbios[$k] -and -not [string]::IsNullOrWhiteSpace([string]$smbios[$k])) {
+                    $smbiosAny = $true
+                    break
+                }
+            }
+            if (-not $smbiosAny) {
+                $errors.Add('smbios enthält keine Original-Serials/UUID.')
+            }
+            if ($smbios.Contains('systemUuid') -and $smbios.systemUuid -and -not (Test-IsGuidString -Value ([string]$smbios.systemUuid))) {
+                $errors.Add("smbios.systemUuid ist keine gültige GUID: '$($smbios.systemUuid)'")
+            }
+        }
+    }
+
+    if (-not $hasAny -and -not ($map.Contains('smbios') -and $map.smbios)) {
         $errors.Add('restorable enthält keine wiederherstellbaren Werte.')
+    }
+    elseif (-not $hasAny) {
+        # SMBIOS-only backup still useful for amide restore
+        $hasAny = $true
+    }
+
+    if (-not $hasAny) {
+        $errors.Add('Backup enthält keine wiederherstellbaren Werte.')
     }
 
     return [pscustomobject]@{
@@ -144,7 +183,6 @@ function Resolve-RestorableMap {
         $InputObject
     )
 
-    # Works for PSCustomObject (ConvertFrom-Json) and OrderedDictionary/hashtable backups.
     $map = ConvertTo-HwidHashtable -InputObject $InputObject
     if ($map.Contains('restorable')) {
         return Get-RestorableMap -Backup $InputObject
@@ -176,18 +214,15 @@ function Compare-RestorableHwid {
         $afterStr = if ($null -eq $after -or [string]::IsNullOrWhiteSpace([string]$after)) { '<fehlt / skip>' } else { [string]$after }
 
         $changed = $false
-        if ($afterStr -eq '<fehlt / skip>') {
-            $changed = $false
-        }
-        elseif ($beforeStr -ne $afterStr) {
+        if ($afterStr -ne '<fehlt / skip>' -and $beforeStr -ne $afterStr) {
             $changed = $true
         }
 
         $rows += [pscustomobject]@{
-            Name    = $name
-            Current = $beforeStr
-            Target  = $afterStr
-            Changed = $changed
+            Name      = $name
+            Current   = $beforeStr
+            Target    = $afterStr
+            Changed   = $changed
             WillWrite = ($afterStr -ne '<fehlt / skip>')
         }
     }
@@ -203,9 +238,9 @@ function Format-HwidDiff {
     )
 
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add('Diff (restorable):')
-    $lines.Add(('{0,-16} {1,-40} {2,-40} {3}' -f 'Feld', 'Aktuell', 'Ziel', 'Aktion'))
-    $lines.Add(('-' * 110))
+    $lines.Add('Diff (restorable registry):')
+    $lines.Add(('{0,-20} {1,-40} {2,-40} {3}' -f 'Feld', 'Aktuell', 'Ziel', 'Aktion'))
+    $lines.Add(('-' * 120))
 
     foreach ($row in $DiffRows) {
         $action = if (-not $row.WillWrite) {
@@ -217,8 +252,46 @@ function Format-HwidDiff {
         else {
             'OK'
         }
-        $lines.Add(('{0,-16} {1,-40} {2,-40} {3}' -f $row.Name, $row.Current, $row.Target, $action))
+        $lines.Add(('{0,-20} {1,-40} {2,-40} {3}' -f $row.Name, $row.Current, $row.Target, $action))
     }
 
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Compare-SmbiosToBackup {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$CurrentBackup,
+        [Parameter(Mandatory)]$TargetBackup
+    )
+
+    $fields = @('systemUuid', 'systemSerial', 'baseBoardSerial', 'chassisSerial', 'biosSerial')
+    $curMap = if ($CurrentBackup.smbios) { ConvertTo-HwidHashtable -InputObject $CurrentBackup.smbios } else { [ordered]@{} }
+    $tgtMap = if ($TargetBackup.smbios) { ConvertTo-HwidHashtable -InputObject $TargetBackup.smbios } else { [ordered]@{} }
+
+    $rows = @()
+    foreach ($name in $fields) {
+        $c = if ($curMap.Contains($name) -and $curMap[$name]) { [string]$curMap[$name] } else { '<fehlt>' }
+        $t = if ($tgtMap.Contains($name) -and $tgtMap[$name]) { [string]$tgtMap[$name] } else { '<fehlt>' }
+        $rows += [pscustomobject]@{
+            Name    = $name
+            Current = $c
+            Backup  = $t
+            Match   = ($c -eq $t)
+        }
+    }
+    return $rows
+}
+
+function Format-SmbiosVerify {
+    param([object[]]$Rows)
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add('Verify SMBIOS (Nebel Permanent Spoof targets):')
+    $lines.Add(('{0,-18} {1,-36} {2,-36} {3}' -f 'Feld', 'Aktuell', 'Backup-Original', 'Status'))
+    $lines.Add(('-' * 110))
+    foreach ($r in $Rows) {
+        $status = if ($r.Match) { 'OK' } else { 'MISMATCH' }
+        $lines.Add(('{0,-18} {1,-36} {2,-36} {3}' -f $r.Name, $r.Current, $r.Backup, $status))
+    }
     return ($lines -join [Environment]::NewLine)
 }

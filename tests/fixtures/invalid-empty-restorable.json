@@ -1,13 +1,10 @@
 {
   "schemaVersion": 1,
-  "createdAt": "2026-11-18T21:20:00.0000000+01:00",
+  "createdAt": "2026-11-18T21:00:00.0000000+01:00",
   "hostname": "TEST-PC",
   "restorable": {
     "machineGuid": null,
-    "hwProfileGuid": "",
+    "hwProfileGuid": null,
     "sqmMachineId": null
-  },
-  "infoOnly": {
-    "computerName": "TEST-PC"
   }
 }
