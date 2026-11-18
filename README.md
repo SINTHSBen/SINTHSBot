@@ -2,6 +2,8 @@
 
 Sicheres Tool, um die **originale Hardware-Identität vor einem Spoof** zu sichern und danach wiederherzustellen.
 
+**Einsteiger:** Schritt-für-Schritt → [`TUTORIAL.md`](TUTORIAL.md)
+
 Enthält:
 - **GUI-EXE**: [`dist/SINTHSBot-HWID.exe`](dist/SINTHSBot-HWID.exe)
 - **CLI**: [`hwid.ps1`](hwid.ps1)
