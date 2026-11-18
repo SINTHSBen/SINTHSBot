@@ -19,5 +19,6 @@
     <EmbeddedResource Include="..\..\lib\Collect.ps1" LogicalName="HwidGui.scripts.lib.Collect.ps1" />
     <EmbeddedResource Include="..\..\lib\Validate.ps1" LogicalName="HwidGui.scripts.lib.Validate.ps1" />
     <EmbeddedResource Include="..\..\lib\Restore.ps1" LogicalName="HwidGui.scripts.lib.Restore.ps1" />
+    <EmbeddedResource Include="..\..\lib\Logger.ps1" LogicalName="HwidGui.scripts.lib.Logger.ps1" />
   </ItemGroup>
 </Project>

@@ -4,6 +4,8 @@ Sicheres Tool, um die **originale Hardware-Identität vor einem Spoof** zu siche
 
 **Einsteiger:** Schritt-für-Schritt → [`TUTORIAL.md`](TUTORIAL.md)
 
+**Bei Fehlern:** GUI → **Log kopieren** / Ordner `%LocalAppData%\SINTHSBot-HWID\logs\` (`latest.log`, `latest-error.txt`)
+
 Enthält:
 - **GUI-EXE**: [`dist/SINTHSBot-HWID.exe`](dist/SINTHSBot-HWID.exe)
 - **CLI**: [`hwid.ps1`](hwid.ps1)
@@ -16,7 +18,7 @@ Getestet gegen das Verhalten von **Nebel Spoofer** (AMIDEWIN SMBIOS, NetworkAddr
 
 Self-contained Build (~147 MB, läuft ohne .NET-Installation):
 
-**Download:** https://gofile.io/d/4zW2FqjC
+**Download:** https://gofile.io/d/WFwZeVPV
 
 (liegt bewusst **nicht** im Git — GitHub-Limit 100 MB)
 

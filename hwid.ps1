@@ -6,15 +6,6 @@
 .DESCRIPTION
     backup / verify / safe restore (registry + NetworkAddress) /
     generate-amide-restore (writes ORIGINAL SMBIOS script for AMIDEWIN — never randomizes).
-
-.EXAMPLE
-    .\hwid.ps1 backup
-.EXAMPLE
-    .\hwid.ps1 verify .\backups\hwid-....json
-.EXAMPLE
-    .\hwid.ps1 restore .\backups\hwid-....json
-.EXAMPLE
-    .\hwid.ps1 generate-amide-restore .\backups\hwid-....json
 #>
 
 [CmdletBinding()]
@@ -37,6 +28,7 @@ if ([string]::IsNullOrWhiteSpace($scriptRoot)) {
     $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 }
 
+. (Join-Path $scriptRoot 'lib\Logger.ps1')
 . (Join-Path $scriptRoot 'lib\Collect.ps1')
 . (Join-Path $scriptRoot 'lib\Validate.ps1')
 . (Join-Path $scriptRoot 'lib\Restore.ps1')
@@ -57,22 +49,8 @@ Workflow:
   2) Nach dem Spoof: .\hwid.ps1 verify <backup>
   3) Safe restore:   .\hwid.ps1 restore <backup>
   4) UEFI original:  .\hwid.ps1 generate-amide-restore <backup>
-     (prüft Skript, legt AMIDEWINx64.EXE daneben, tippt RESTORE-ORIGINAL)
 
-Usage:
-  .\hwid.ps1 backup
-  .\hwid.ps1 list
-  .\hwid.ps1 show [file]
-  .\hwid.ps1 verify <file>
-  .\hwid.ps1 restore <file> [-Force]
-  .\hwid.ps1 generate-amide-restore <file>
-
-Safe restore writes:
-  MachineGuid, HwProfileGuid, SQM MachineId, SusClientId, ComputerHardwareId,
-  NetworkAddress overrides (clear/set to match backup)
-
-Never auto-writes:
-  UEFI/SMBIOS firmware, EEPROM MAC (MACX), TPM/BIOS flash, random spoof values
+Logs: `$env:LOCALAPPDATA\SINTHSBot-HWID\logs\latest.log
 "@ | Write-Host
 }
 
@@ -95,29 +73,67 @@ function Resolve-BackupPath {
     throw "Backup-Datei nicht gefunden: $FilePath"
 }
 
-function Invoke-HwidBackupCommand {
-    $result = Save-HwidBackup -BackupDirectory $BackupDirectory -Prefix 'hwid'
-    $validation = Test-HwidBackupObject -Backup $result.Payload
-    if (-not $validation.IsValid) {
-        Write-Warning ("Backup geschrieben, aber Validierung: {0}" -f ($validation.Errors -join '; '))
+function Get-PropSafe {
+    param($Object, [string]$Name, [string]$Fallback = '<n/a>')
+    if ($null -eq $Object) { return $Fallback }
+    try {
+        $map = $Object
+        if ($Object -isnot [hashtable] -and $Object -isnot [System.Collections.Specialized.OrderedDictionary]) {
+            # PSCustomObject / others
+            $p = $Object.PSObject.Properties[$Name]
+            if ($null -eq $p -or $null -eq $p.Value -or [string]::IsNullOrWhiteSpace([string]$p.Value)) {
+                return $Fallback
+            }
+            return [string]$p.Value
+        }
+        if ($map.Contains($Name) -and $map[$Name] -and -not [string]::IsNullOrWhiteSpace([string]$map[$Name])) {
+            return [string]$map[$Name]
+        }
     }
+    catch { }
+    return $Fallback
+}
 
-    Write-Host "Original-Backup gespeichert: $($result.Path)"
-    Write-Host ''
-    $r = $result.Payload.restorable
-    Write-Host 'Registry (safe restorable):'
-    Write-Host ("  machineGuid:   {0}" -f $(if ($r.machineGuid) { $r.machineGuid } else { '<n/a>' }))
-    Write-Host ("  hwProfileGuid: {0}" -f $(if ($r.hwProfileGuid) { $r.hwProfileGuid } else { '<n/a>' }))
-    Write-Host ("  sqmMachineId:  {0}" -f $(if ($r.sqmMachineId) { $r.sqmMachineId } else { '<n/a>' }))
-    Write-Host ("  susClientId:   {0}" -f $(if ($r.susClientId) { $r.susClientId } else { '<n/a>' }))
-    $s = $result.Payload.smbios
-    Write-Host 'SMBIOS (für generate-amide-restore):'
-    Write-Host ("  UUID:          {0}" -f $(if ($s.systemUuid) { $s.systemUuid } else { '<n/a>' }))
-    Write-Host ("  BaseBoard:     {0}" -f $(if ($s.baseBoardSerial) { $s.baseBoardSerial } else { '<n/a>' }))
-    Write-Host ("  Chassis:       {0}" -f $(if ($s.chassisSerial) { $s.chassisSerial } else { '<n/a>' }))
-    Write-Host ("  SystemSerial:  {0}" -f $(if ($s.systemSerial) { $s.systemSerial } else { '<n/a>' }))
-    Write-Host ''
-    Write-Host 'Wichtig: Dieses Backup VOR Nebel Permanent Spoof / MACX erstellen.'
+function Invoke-HwidBackupCommand {
+    Write-HwidLog -Level INFO -Message ("backup start backupsDir={0}" -f $BackupDirectory)
+    Write-HwidLog -Level INFO -Message ("PSVersion={0} User={1} IsAdmin={2}" -f $PSVersionTable.PSVersion, $env:USERNAME, (Test-IsAdministrator))
+
+    try {
+        $result = Save-HwidBackup -BackupDirectory $BackupDirectory -Prefix 'hwid'
+        Write-HwidLog -Level INFO -Message ("backup written path={0}" -f $result.Path)
+
+        $validation = Test-HwidBackupObject -Backup $result.Payload
+        if (-not $validation.IsValid) {
+            $msg = ($validation.Errors -join '; ')
+            Write-Warning ("Backup geschrieben, aber Validierung: {0}" -f $msg)
+            Write-HwidLog -Level WARN -Message ("backup validation soft-fail: {0}" -f $msg)
+        }
+        else {
+            Write-HwidLog -Level INFO -Message 'backup validation OK'
+        }
+
+        Write-Host "Original-Backup gespeichert: $($result.Path)"
+        Write-Host ''
+        $r = $result.Payload.restorable
+        Write-Host 'Registry (safe restorable):'
+        Write-Host ("  machineGuid:   {0}" -f (Get-PropSafe $r 'machineGuid'))
+        Write-Host ("  hwProfileGuid: {0}" -f (Get-PropSafe $r 'hwProfileGuid'))
+        Write-Host ("  sqmMachineId:  {0}" -f (Get-PropSafe $r 'sqmMachineId'))
+        Write-Host ("  susClientId:   {0}" -f (Get-PropSafe $r 'susClientId'))
+        $s = $result.Payload.smbios
+        Write-Host 'SMBIOS (für generate-amide-restore):'
+        Write-Host ("  UUID:          {0}" -f (Get-PropSafe $s 'systemUuid'))
+        Write-Host ("  BaseBoard:     {0}" -f (Get-PropSafe $s 'baseBoardSerial'))
+        Write-Host ("  Chassis:       {0}" -f (Get-PropSafe $s 'chassisSerial'))
+        Write-Host ("  SystemSerial:  {0}" -f (Get-PropSafe $s 'systemSerial'))
+        Write-Host ''
+        Write-Host ("Log: {0}" -f (Join-Path (Get-HwidLogDirectory) 'latest.log'))
+        Write-Host 'Wichtig: Dieses Backup VOR Nebel Permanent Spoof / MACX erstellen.'
+    }
+    catch {
+        Write-HwidLog -Level ERROR -Message 'backup failed' -ErrorRecord $_
+        throw
+    }
 }
 
 function Invoke-HwidListCommand {
@@ -161,6 +177,8 @@ function Invoke-HwidShowCommand {
     Write-Host ($backup | ConvertTo-Json -Depth 10)
 }
 
+Write-HwidLog -Level INFO -Message ("hwid.ps1 start command={0} path={1} force={2}" -f $Command, $Path, [bool]$Force)
+
 try {
     switch ($Command) {
         'help' { Show-Usage }
@@ -188,8 +206,11 @@ try {
         }
         default { Show-Usage }
     }
+    Write-HwidLog -Level INFO -Message ("hwid.ps1 end OK command={0}" -f $Command)
 }
 catch {
+    Write-HwidLog -Level ERROR -Message ("hwid.ps1 failed command={0}" -f $Command) -ErrorRecord $_
     Write-Error $_.Exception.Message
+    Write-Host ("Log: {0}" -f (Join-Path (Get-HwidLogDirectory) 'latest-error.txt'))
     exit 1
 }

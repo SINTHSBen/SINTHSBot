@@ -265,6 +265,10 @@ function Save-HwidBackup {
         [string]$Prefix = 'hwid'
     )
 
+    if (Get-Command Write-HwidLog -ErrorAction SilentlyContinue) {
+        Write-HwidLog -Level INFO -Message ("Save-HwidBackup dir={0} prefix={1}" -f $BackupDirectory, $Prefix)
+    }
+
     if (-not (Test-Path -LiteralPath $BackupDirectory)) {
         New-Item -ItemType Directory -Path $BackupDirectory -Force | Out-Null
     }
@@ -273,9 +277,30 @@ function Save-HwidBackup {
     $fileName = '{0}-{1}.json' -f $Prefix, $stamp
     $path = Join-Path -Path $BackupDirectory -ChildPath $fileName
 
-    $payload = New-HwidBackupObject
-    $json = $payload | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($path, $json)
+    try {
+        $payload = New-HwidBackupObject
+    }
+    catch {
+        if (Get-Command Write-HwidLog -ErrorAction SilentlyContinue) {
+            Write-HwidLog -Level ERROR -Message 'New-HwidBackupObject failed' -ErrorRecord $_
+        }
+        throw
+    }
+
+    try {
+        $json = $payload | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($path, $json)
+    }
+    catch {
+        if (Get-Command Write-HwidLog -ErrorAction SilentlyContinue) {
+            Write-HwidLog -Level ERROR -Message ("WriteAllText failed path={0}" -f $path) -ErrorRecord $_
+        }
+        throw
+    }
+
+    if (Get-Command Write-HwidLog -ErrorAction SilentlyContinue) {
+        Write-HwidLog -Level INFO -Message ("Save-HwidBackup OK path={0} bytes={1}" -f $path, (Get-Item -LiteralPath $path).Length)
+    }
 
     return [pscustomobject]@{
         Path    = $path

@@ -14,14 +14,16 @@ public sealed class MainForm : Form
     private readonly Button _btnAmide = new();
     private readonly Button _btnOpenFolder = new();
     private readonly Button _btnShow = new();
+    private readonly Button _btnOpenLog = new();
+    private readonly Button _btnCopyLog = new();
     private bool _busy;
 
     public MainForm()
     {
         Text = "SINTHSBot HWID Backup";
-        Width = 820;
-        Height = 560;
-        MinimumSize = new Size(720, 480);
+        Width = 860;
+        Height = 580;
+        MinimumSize = new Size(740, 500);
         StartPosition = FormStartPosition.CenterScreen;
         Font = new Font("Segoe UI", 9.75f);
         BackColor = Color.FromArgb(24, 26, 28);
@@ -42,7 +44,7 @@ public sealed class MainForm : Form
 
         var hint = new Label
         {
-            Text = "Nur Backup geht ohne Admin. Restore braucht UAC. UEFI nur über generate-amide-restore (Original-Serials).",
+            Text = "Nur Backup = 100% safe. Bei Fehlern: Log öffnen / Log kopieren und schicken.",
             Dock = DockStyle.Top,
             Height = 28,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -60,7 +62,9 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top,
             Height = 52,
             Padding = new Padding(12, 10, 12, 8),
-            BackColor = Color.FromArgb(24, 26, 28)
+            BackColor = Color.FromArgb(24, 26, 28),
+            WrapContents = false,
+            AutoScroll = true
         };
 
         StyleButton(_btnBackup, "Backup", Color.FromArgb(46, 125, 90));
@@ -70,8 +74,13 @@ public sealed class MainForm : Form
         StyleButton(_btnRestore, "Safe Restore", Color.FromArgb(140, 70, 50));
         StyleButton(_btnAmide, "AMIDE-Skript", Color.FromArgb(55, 60, 66));
         StyleButton(_btnOpenFolder, "Ordner", Color.FromArgb(55, 60, 66));
+        StyleButton(_btnOpenLog, "Log öffnen", Color.FromArgb(70, 90, 120));
+        StyleButton(_btnCopyLog, "Log kopieren", Color.FromArgb(70, 90, 120));
 
-        buttons.Controls.AddRange([_btnBackup, _btnRefresh, _btnShow, _btnVerify, _btnRestore, _btnAmide, _btnOpenFolder]);
+        buttons.Controls.AddRange([
+            _btnBackup, _btnRefresh, _btnShow, _btnVerify, _btnRestore,
+            _btnAmide, _btnOpenFolder, _btnOpenLog, _btnCopyLog
+        ]);
 
         _backupList.Dock = DockStyle.Left;
         _backupList.Width = 320;
@@ -137,30 +146,58 @@ public sealed class MainForm : Form
         _btnVerify.Click += async (_, _) => await RunSelectedAsync("verify", elevate: false, force: false);
         _btnRestore.Click += async (_, _) => await RunRestoreAsync();
         _btnAmide.Click += async (_, _) => await RunSelectedAsync("generate-amide-restore", elevate: false, force: false);
-        _btnOpenFolder.Click += (_, _) =>
+        _btnOpenFolder.Click += (_, _) => OpenPath(ScriptHost.BackupsRoot);
+        _btnOpenLog.Click += (_, _) =>
         {
-            ScriptHost.EnsureExtracted();
-            Process.Start(new ProcessStartInfo
+            AppLog.Ensure();
+            OpenPath(AppLog.LogsRoot);
+            AppendLog("Log-Ordner: " + AppLog.LogsRoot);
+            AppendLog("latest.log / latest-error.txt — die kannst du mir schicken.");
+        };
+        _btnCopyLog.Click += (_, _) =>
+        {
+            try
             {
-                FileName = ScriptHost.BackupsRoot,
-                UseShellExecute = true
-            });
+                var text = AppLog.ReadLatestError();
+                Clipboard.SetText(string.IsNullOrWhiteSpace(text) ? AppLog.ReadLatest() : text);
+                AppendLog("Log in Zwischenablage kopiert.");
+                _status.Text = "Log kopiert — hier einfügen / schicken";
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("ERROR", "Clipboard copy failed", ex);
+                AppendLog("Kopieren fehlgeschlagen: " + ex.Message);
+            }
         };
 
         Load += (_, _) =>
         {
             try
             {
+                AppLog.Write("INFO", "GUI start");
                 ScriptHost.EnsureExtracted();
                 AppendLog($"Scripts: {ScriptHost.ScriptsRoot}");
                 AppendLog($"Backups: {ScriptHost.BackupsRoot}");
+                AppendLog($"Logs:    {AppLog.LogsRoot}");
                 RefreshList();
             }
             catch (Exception ex)
             {
+                AppLog.Write("ERROR", "GUI init failed", ex);
                 AppendLog("Init-Fehler: " + ex.Message);
+                AppendLog("Details: " + AppLog.LatestLogPath);
             }
         };
+    }
+
+    private static void OpenPath(string path)
+    {
+        Directory.CreateDirectory(path);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = path,
+            UseShellExecute = true
+        });
     }
 
     private static void StyleButton(Button btn, string text, Color bg)
@@ -184,7 +221,7 @@ public sealed class MainForm : Form
         {
             _backupList.Items.Add(Path.GetFileName(f));
         }
-        _status.Text = $"{_backupList.Items.Count} Backup(s) · {ScriptHost.BackupsRoot}";
+        _status.Text = $"{_backupList.Items.Count} Backup(s) · Logs: {AppLog.LogsRoot}";
     }
 
     private string? SelectedBackupPath()
@@ -196,7 +233,11 @@ public sealed class MainForm : Form
     private void SetBusy(bool busy)
     {
         _busy = busy;
-        foreach (Control c in new Control[] { _btnBackup, _btnRefresh, _btnShow, _btnVerify, _btnRestore, _btnAmide, _btnOpenFolder })
+        foreach (Control c in new Control[]
+                 {
+                     _btnBackup, _btnRefresh, _btnShow, _btnVerify, _btnRestore,
+                     _btnAmide, _btnOpenFolder, _btnOpenLog, _btnCopyLog
+                 })
         {
             c.Enabled = !busy;
         }
@@ -221,14 +262,37 @@ public sealed class MainForm : Form
         try
         {
             AppendLog(">>> backup");
+            AppLog.Write("INFO", "UI Backup clicked");
             var (code, output) = await ScriptHost.RunAsync("backup");
-            AppendLog(output);
-            AppendLog(code == 0 ? "OK" : $"Exit {code}");
-            RefreshList();
+            AppendLog(string.IsNullOrWhiteSpace(output) ? "(keine PowerShell-Ausgabe)" : output);
+            if (code == 0)
+            {
+                AppendLog("OK — Backup geschrieben.");
+                RefreshList();
+                if (_backupList.Items.Count == 0)
+                {
+                    AppendLog("WARN: Exit 0, aber Liste leer. Check: " + ScriptHost.BackupsRoot);
+                    AppLog.Write("WARN", "Backup exit 0 but list empty");
+                }
+            }
+            else
+            {
+                AppendLog($"FEHLER Exit {code}");
+                AppendLog("Log öffnen / Log kopieren → latest-error.txt schicken.");
+                AppendLog(AppLog.LatestErrorPath);
+                MessageBox.Show(
+                    this,
+                    "Backup fehlgeschlagen.\n\nLog kopieren und schicken:\n" + AppLog.LatestErrorPath,
+                    "Backup Fehler",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
         catch (Exception ex)
         {
+            AppLog.Write("ERROR", "UI Backup exception", ex);
             AppendLog("Fehler: " + ex.Message);
+            AppendLog(AppLog.LatestLogPath);
         }
         finally
         {
@@ -251,12 +315,13 @@ public sealed class MainForm : Form
         {
             AppendLog($">>> {command} {(path is null ? "" : Path.GetFileName(path))}");
             var (code, output) = await ScriptHost.RunAsync(command, path, force, elevate);
-            AppendLog(output);
-            AppendLog(code == 0 ? "OK" : $"Exit {code}");
+            AppendLog(string.IsNullOrWhiteSpace(output) ? "(keine PowerShell-Ausgabe)" : output);
+            AppendLog(code == 0 ? "OK" : $"FEHLER Exit {code} — siehe Log: {AppLog.LatestLogPath}");
             if (command is "backup" or "restore" or "generate-amide-restore") RefreshList();
         }
         catch (Exception ex)
         {
+            AppLog.Write("ERROR", $"UI command {command} exception", ex);
             AppendLog("Fehler: " + ex.Message);
         }
         finally

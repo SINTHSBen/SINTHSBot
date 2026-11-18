@@ -128,7 +128,16 @@ PowerShell im Repo-Ordner:
 
 ---
 
-## 6. Typische Fehler
+## 6. Logs bei Problemen
+
+Wenn Backup/Restore hakt:
+
+1. In der GUI **Log öffnen** oder **Log kopieren**
+2. Ordner: `%LocalAppData%\SINTHSBot-HWID\logs\`
+3. Dateien: `latest.log` (alles) · `latest-error.txt` (letzter Fehler)
+4. Inhalt hier schicken — dann kann man’s direkt auslesen
+
+## 7. Typische Fehler
 
 | Problem | Lösung |
 |---------|--------|
@@ -136,11 +145,11 @@ PowerShell im Repo-Ordner:
 | Restore bricht ab / UAC weg | Nochmal, UAC mit Ja |
 | Verify noch MISMATCH nach Safe Restore | Permanent Spoof / MACX → AMIDE-Skript bzw. EEPROM manuell |
 | AMIDE-Skript findet EXE nicht | `AMIDEWINx64.EXE` in denselben Ordner wie die `.bat` |
-| Backup-Liste leer | Falsche Windows-User-Session / Ordner-Button checken |
+| Backup-Liste leer | Log checken + Ordner-Button; Session/Pfad stimmt ggf. nicht |
 
 ---
 
-## 7. Merksatz
+## 8. Merksatz
 
 ```text
 Backup VORHER  →  Spoof  →  Verify  →  Safe Restore  →  (AMIDE nur bei UEFI)  →  Reboot  →  Verify
