@@ -47,17 +47,24 @@ internal static class ScriptHost
                     AppLog.Write("ERROR", msg);
                     throw new FileNotFoundException(msg);
                 }
-                File.Copy(fallback, target, overwrite: true);
+                WriteScriptUtf8Bom(File.ReadAllText(fallback, Encoding.UTF8), target);
                 AppLog.Write("INFO", $"Script fallback copy: {rel} <- {fallback}");
                 continue;
             }
 
-            using var fs = File.Create(target);
-            stream.CopyTo(fs);
+            // Windows PowerShell 5.1 defaults to system ANSI without BOM;
+            // UTF-8 em-dashes then break string literals. Always emit UTF-8 BOM.
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            WriteScriptUtf8Bom(reader.ReadToEnd(), target);
         }
 
-        File.WriteAllText(Path.Combine(ScriptsRoot, "backups.path"), BackupsRoot, Encoding.UTF8);
+        File.WriteAllText(Path.Combine(ScriptsRoot, "backups.path"), BackupsRoot, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         AppLog.Write("DEBUG", $"Scripts extracted to {ScriptsRoot}");
+    }
+
+    private static void WriteScriptUtf8Bom(string content, string target)
+    {
+        File.WriteAllText(target, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
 
     private static string? FindFallbackScript(string rel)

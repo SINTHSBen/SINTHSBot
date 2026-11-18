@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     File logger for SINTHSBot HWID tool.
@@ -66,7 +66,7 @@ function Write-HwidLog {
         if ($Level -eq 'ERROR') {
             $errFile = Join-Path $dir 'latest-error.txt'
             $errBody = @(
-                "SINTHSBot HWID — letzter Fehler"
+                "SINTHSBot HWID -- letzter Fehler"
                 "Zeit: $stamp"
                 "Message: $Message"
                 ""

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Safe restore + AMIDEWIN original-restore script generation (Nebel-aware).
@@ -206,7 +206,7 @@ function Invoke-HwidRestore {
     $hasNetworkPlan = $true  # always reconcile NetworkAddress against backup
 
     if ($willWrite.Count -eq 0) {
-        Write-Host 'Keine Registry-ID-Änderungen — NetworkAddress wird trotzdem an Backup angeglichen.'
+        Write-Host 'Keine Registry-ID-Änderungen -- NetworkAddress wird trotzdem an Backup angeglichen.'
     }
 
     if (-not $Force) {
@@ -259,7 +259,7 @@ function Invoke-HwidRestore {
             Write-Host 'Rollback abgeschlossen.'
         }
         catch {
-            throw "Rollback fehlgeschlagen. Manuell: .\hwid.ps1 restore `"$($snap.Path)`" — $($_.Exception.Message)"
+            throw "Rollback fehlgeschlagen. Manuell: .\hwid.ps1 restore `"$($snap.Path)`" -- $($_.Exception.Message)"
         }
         throw "Restore abgebrochen und Rollback ausgeführt. Details: $($_.Exception.Message)"
     }
@@ -295,7 +295,7 @@ function Invoke-HwidVerify {
     if ($backup.infoOnly -and $backup.infoOnly.macAddresses) {
         $bakMacs = @($backup.infoOnly.macAddresses)
     }
-    Write-Host 'MAC fingerprints (infoOnly — EEPROM/Kernel spoofs zeigen sich hier):'
+    Write-Host 'MAC fingerprints (infoOnly -- EEPROM/Kernel spoofs zeigen sich hier):'
     Write-Host ("  aktuell: {0}" -f ($(if ($curMacs.Count) { $curMacs -join ', ' } else { '<keine>' })))
     Write-Host ("  backup:  {0}" -f ($(if ($bakMacs.Count) { $bakMacs -join ', ' } else { '<keine>' })))
 
@@ -312,7 +312,7 @@ function Invoke-HwidVerify {
     }
 
     Write-Host ''
-    Write-Host 'Verify: Abweichungen gefunden — typisch nach Spoof. Safe restore + ggf. generate-amide-restore nutzen.'
+    Write-Host 'Verify: Abweichungen gefunden -- typisch nach Spoof. Safe restore + ggf. generate-amide-restore nutzen.'
     return [pscustomobject]@{ Status = 'Mismatch'; Registry = $regMismatch; Smbios = $smbMismatch }
 }
 
@@ -348,7 +348,7 @@ function New-AmideOriginalRestoreScript {
     }
 
     if ([string]::IsNullOrWhiteSpace($bs) -and [string]::IsNullOrWhiteSpace($cs) -and [string]::IsNullOrWhiteSpace($ss) -and [string]::IsNullOrWhiteSpace($uuid)) {
-        throw 'Keine SMBIOS-Originalwerte im Backup — AMIDEWIN-Restore-Skript kann nicht erzeugt werden.'
+        throw 'Keine SMBIOS-Originalwerte im Backup -- AMIDEWIN-Restore-Skript kann nicht erzeugt werden.'
     }
 
     if (-not (Test-Path -LiteralPath $OutputDirectory)) {
@@ -359,7 +359,7 @@ function New-AmideOriginalRestoreScript {
     $batPath = Join-Path $OutputDirectory ("restore-amide-original-$stamp.bat")
     $txtPath = Join-Path $OutputDirectory ("restore-amide-original-$stamp.txt")
 
-    # Never use /SU auto here — that would create a NEW uuid (spoof). Restore ORIGINAL uuid.
+    # Never use /SU auto here -- that would create a NEW uuid (spoof). Restore ORIGINAL uuid.
     $uuidArg = $null
     if ($uuid -and (Test-IsGuidString -Value $uuid)) {
         $uuidArg = $uuid.Trim('{}')
@@ -419,7 +419,7 @@ SINTHSBot AMIDEWIN original restore
 Created: $((Get-Date).ToString('o'))
 Source backup: $BackupPath
 
-Commands (ORIGINAL values only — no randomization):
+Commands (ORIGINAL values only -- no randomization):
 $($cmdLines -join "`r`n")
 
 After running the .bat as Admin and rebooting:
@@ -435,7 +435,7 @@ write back the MACs listed in the backup infoOnly.macAddresses using your NIC to
     Write-Host "AMIDEWIN Original-Restore-Skript: $batPath"
     Write-Host "Befehlsübersicht:                 $txtPath"
     Write-Host 'Kopiere AMIDEWINx64.EXE (+ .sys Treiber) in denselben Ordner, prüfe die Werte, dann als Admin ausführen.'
-    Write-Host 'Kein Auto-Flash von hier aus — absichtlich.'
+    Write-Host 'Kein Auto-Flash von hier aus -- absichtlich.'
 
     return [pscustomobject]@{
         BatPath = $batPath

@@ -1,11 +1,11 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Windows HWID Backup & Restore — original identity before/after Nebel-style spoof.
+    Windows HWID Backup & Restore -- original identity before/after Nebel-style spoof.
 
 .DESCRIPTION
     backup / verify / safe restore (registry + NetworkAddress) /
-    generate-amide-restore (writes ORIGINAL SMBIOS script for AMIDEWIN — never randomizes).
+    generate-amide-restore (writes ORIGINAL SMBIOS script for AMIDEWIN -- never randomizes).
 #>
 
 [CmdletBinding()]

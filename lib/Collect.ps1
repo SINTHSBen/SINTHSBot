@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Collect Windows identity for original-HWID backup (Nebel-aware).
@@ -218,7 +218,7 @@ function Get-InfoOnlyHwid {
         notes        = @(
             'Backup BEFORE Nebel Permanent Spoof / Kernel MAC / MACX.',
             'SMBIOS fields are restored via generate-amide-restore (AMIDEWIN), not via safe restore.',
-            'EEPROM MAC (MACX) is NOT auto-restored — keep original MACs from infoOnly.macAddresses.'
+            'EEPROM MAC (MACX) is NOT auto-restored -- keep original MACs from infoOnly.macAddresses.'
         )
     }
 }

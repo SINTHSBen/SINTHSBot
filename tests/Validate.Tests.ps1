@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Fixture tests for lib/Validate.ps1 (no Windows registry required).
@@ -30,7 +30,7 @@ function Assert-True {
     }
     else {
         $script:Failed++
-        $msg = if ($Detail) { "$Name — $Detail" } else { $Name }
+        $msg = if ($Detail) { "$Name -- $Detail" } else { $Name }
         $script:Failures.Add($msg)
         Write-Host "  FAIL  $msg"
     }

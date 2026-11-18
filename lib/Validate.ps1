@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Schema/GUID validation, diffs, and verify helpers for HWID backups.

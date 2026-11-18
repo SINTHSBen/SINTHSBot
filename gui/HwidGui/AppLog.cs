@@ -40,7 +40,7 @@ internal static class AppLog
             if (level is "ERROR" or "FATAL")
             {
                 var body =
-                    "SINTHSBot HWID — letzter Fehler" + Environment.NewLine +
+                    "SINTHSBot HWID -- letzter Fehler" + Environment.NewLine +
                     "Zeit: " + stamp + Environment.NewLine +
                     "Message: " + message + Environment.NewLine +
                     Environment.NewLine +
