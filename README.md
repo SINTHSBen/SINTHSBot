@@ -10,23 +10,32 @@ Getestet gegen das Verhalten von **Nebel Spoofer** (AMIDEWIN SMBIOS, NetworkAddr
 
 ## GUI (EXE)
 
-1. [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) installieren (Windows x64 Desktop Runtime)
-2. `dist\SINTHSBot-HWID.exe` starten
-3. **Backup** klicken (ohne Admin möglich)
-4. Später Backup wählen → **Verify** / **Safe Restore** (UAC) / **AMIDE-Skript**
+### Variante A — ohne Extra-Runtime (empfohlen)
 
-Backups liegen unter `%LocalAppData%\SINTHSBot-HWID\backups\`.
+Self-contained Build (~147 MB, läuft ohne .NET-Installation):
 
-EXE neu bauen:
+**Download:** https://gofile.io/d/4zW2FqjC
+
+(liegt bewusst **nicht** im Git — GitHub-Limit 100 MB)
+
+### Variante B — klein aus dem Repo
+
+1. [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) installieren (Windows x64)
+2. [`dist/SINTHSBot-HWID.exe`](dist/SINTHSBot-HWID.exe) starten (~230 KB)
+
+### Bedienung
+
+1. EXE starten
+2. **Backup** klicken (ohne Admin möglich)
+3. Später Backup wählen → **Verify** / **Safe Restore** (UAC) / **AMIDE-Skript**
+
+Backups: `%LocalAppData%\SINTHSBot-HWID\backups\`
+
+Neu bauen:
 
 ```powershell
-.\gui\build.ps1          # klein (framework-dependent) — Default
-.\gui\build.ps1 -Mode self   # groß, ohne Runtime-Installation
-```
-
-```bash
-bash gui/build.sh        # fd
-bash gui/build.sh self   # self-contained
+.\gui\build.ps1              # klein (braucht Runtime)
+.\gui\build.ps1 -Mode self   # groß, standalone
 ```
 
 ## CLI-Ablauf
